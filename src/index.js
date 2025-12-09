@@ -41,7 +41,7 @@ app.use(cors((corsOptions)))
 app.post('/webhook', express.raw({type: 'application/json'}), handleWebhook);
 
 //database conection
-mongoose.connect(process.env.MONGO_URI).then(() => console.log('Db connected'));
+mongoose.connect(process.env.MONGO_URI).then(() => console.log('Db connected')).catch((err) => console.log('Db connection error', err));
 
 app.use(express.urlencoded({extended: true}));
 app.use(express.json());
