@@ -4,7 +4,6 @@ const env = require('dotenv');
 const app = express();
 const path = require('path');
 const cors = require('cors');
-const { handleWebhook } = require('./controllers/stripe');
 const bodyParser = require('body-parser');
 
 //routes
@@ -14,13 +13,13 @@ const categoryRoutes = require('./routes/category');
 const cartRoutes = require('./routes/cart');
 const orderRoutes = require('./routes/order');
 const homeSectionsRoutes = require('./routes/homeSection');
-const stripeRoutes = require('./routes/stripe');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 //env
 env.config();
 
 // cors config
-var whitelist = ['http://localhost:3000', 'http://example2.com']
+var whitelist = ['http://localhost:3000', 'https://mercadopago.com.co']
 var corsOptions = {
   origin: function (origin, callback) {
     if(!origin){//for bypassing postman req with  no origin
@@ -36,9 +35,6 @@ var corsOptions = {
   credentials: true,
 }
 app.use(cors((corsOptions)))
-
-//stripe webhook
-app.post('/webhook', express.raw({type: 'application/json'}), handleWebhook);
 
 //database conection
 mongoose.connect(process.env.MONGO_URI).then(() => console.log('Db connected')).catch((err) => console.log('Db connection error', err));
@@ -57,7 +53,7 @@ app.use('/api', categoryRoutes);
 app.use('/api', cartRoutes);
 app.use('/api', orderRoutes);
 app.use('/api', homeSectionsRoutes);
-app.use('/api', stripeRoutes);
+app.use('/api/payment', paymentRoutes);
 
 app.listen(process.env.PORT, () => {
   console.log(`application running on Port: ${process.env.PORT}`)
