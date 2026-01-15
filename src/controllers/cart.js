@@ -17,6 +17,8 @@ exports.addItemToCart = async (req, res) => {
       const stock = product.quantity;
       const price = product.price;
       const offer = product.offer;
+      const size = item.size;
+      const color = item.color;
       let discountedPrice;
       if(offer ){
         discountedPrice = price - (price * offer / 100);
@@ -28,18 +30,22 @@ exports.addItemToCart = async (req, res) => {
         return res.status(400).json({ message: `Insufficient stock for ${product.name}` });
       }
 
-      const itemIndex = cart.cartItems.findIndex(cartItem => cartItem.product.toString() === item._id.toString());
+      const itemIndex = cart.cartItems.findIndex(cartItem => cartItem.product.toString() === item._id.toString() && cartItem.size === size && cartItem.color === color);
 
       if (itemIndex !== -1) {
         cart.cartItems[itemIndex].quantity += quantity;
         cart.cartItems[itemIndex].price = discountedPrice;
         cart.cartItems[itemIndex].offer = offer;
+        cart.cartItems[itemIndex].size = size;
+        cart.cartItems[itemIndex].color = color;
       } else {
         cart.cartItems.push({
           product: item._id,
           price: discountedPrice,
           quantity: quantity,
-          offer: offer
+          offer: offer,
+          size: size,
+          color: color
         });
       }
 
@@ -61,6 +67,8 @@ exports.addItemToCart = async (req, res) => {
       const stock = product.quantity;
       const price = product.price;
       const offer = product.offer;
+      const size = item.size;
+      const color = item.color;
       let discountedPrice;
       if(offer ){
         discountedPrice = price - (price * offer / 100);
@@ -78,7 +86,9 @@ exports.addItemToCart = async (req, res) => {
           product: item._id,
           price: discountedPrice,
           quantity: quantity,
-          offer: offer
+          offer: offer,
+          size: size,
+          color: color
         }]
       });
 
@@ -100,7 +110,9 @@ exports.removeItemFromCart = async (req, res) => {
     }
 
     const productToRemove = req.params.productId;
-    const itemIndex = cart.cartItems.findIndex(item => item.product.toString() === productToRemove.toString());
+    const sizeToRemove = req.params.size;
+    const colorToRemove = req.params.color;
+    const itemIndex = cart.cartItems.findIndex(item => item.product.toString() === productToRemove.toString() && item.size === sizeToRemove && item.color === colorToRemove);
 
     if (itemIndex === -1) {
       return res.status(404).json({ message: 'Item not found in cart' });
@@ -114,7 +126,9 @@ exports.removeItemFromCart = async (req, res) => {
         _id: item.product,
         quantity: item.quantity,
         price: item.price,
-        offer: item.offer
+        offer: item.offer,
+        size: item.size,
+        color: item.color
       }
     });
     return res.status(200).json({ cartItems: cartItems});
@@ -161,6 +175,8 @@ exports.checkProductsForCheckout = async (req, res) => {
       const stock = product.quantity;
       const price = product.price;
       const offer = product.offer;
+      const size = item.size;
+      const color = item.color;
       let discountedPrice;
       if(offer ){
         discountedPrice = price - (price * offer / 100);
@@ -201,6 +217,10 @@ exports.getCartItems = async (req, res) => {
         price: item.price,
         quantity: item.quantity,
         offer: item.offer,
+        size: item.size,
+        color: item.color,
+        name: item.product.name,
+        productImages: item.product.productImages
       }
     });
 
@@ -231,6 +251,8 @@ exports.subtractQuantity = async (req, res) => {
     const productId = req.body.productId;
     const product = await Product.findById(productId);
     const quantityToSubstract = req.body.quantity;
+    const size = req.body.size;
+    const color = req.body.color;
 
     if (!cart) {
       return res.status(404).json({ message: 'Cart not found' });
@@ -240,7 +262,7 @@ exports.subtractQuantity = async (req, res) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    const productIndex = cart.cartItems.findIndex(item => item.product.toString() === product._id.toString());
+    const productIndex = cart.cartItems.findIndex(item => item.product.toString() === product._id.toString() && item.size === size && item.color === color);
 
     if (productIndex === -1) {
       return res.status(404).json({ message: 'Product not found in cart' });
@@ -261,7 +283,9 @@ exports.subtractQuantity = async (req, res) => {
         _id: item.product._id,
         quantity: item.quantity,
         price: item.price,
-        offer: item.offer
+        offer: item.offer,
+        size: item.size,
+        color: item.color
       }
     });
 

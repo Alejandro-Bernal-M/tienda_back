@@ -31,7 +31,7 @@ exports.createProduct = async (req, res) => {
   if (req.body === null || req.body === undefined || req.body.size === 0) {
     return res.status(400).json({ message: 'Please fill all required fields' });
   }
-  const { name, price, quantity, description, category, offer } = req.body;
+  const { name, price, quantity, description, category, offer, sizes, colors } = req.body;
   let productImages = [];
 
   if (req.files && req.files.length > 0) {
@@ -47,6 +47,8 @@ exports.createProduct = async (req, res) => {
     category,
     productImages,
     offer,
+    sizes,
+    colors,
     createdBy: req.user._id,
   });
 
@@ -130,7 +132,7 @@ exports.deleteProduct = async (req, res) => {
 };
 
 exports.updateProduct = async (req, res) => {
-  const { name, price, quantity, description, category, reviews, offer, imagesToDeleteIds, imagesToDelete } = req.body;
+  const { name, price, quantity, description, category, reviews, offer, sizes, colors, imagesToDeleteIds, imagesToDelete } = req.body;
   let productImages = [];
   if (req.files && req.files.length > 0) {
     productImages = req.files.map((file) => ({ img: file.filename }));
@@ -146,6 +148,8 @@ exports.updateProduct = async (req, res) => {
     updatedAt: Date.now(),
     reviews,
     offer,
+    sizes: sizes.split(',').map(size => size.trim()),
+    colors: colors.split(',').map(color => color.trim())
   };
 
   try {

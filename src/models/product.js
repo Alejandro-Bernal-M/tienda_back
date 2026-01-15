@@ -52,6 +52,8 @@ const ProductSchema = mongoose.Schema({
     type: mongoose.Types.ObjectId, ref: 'Category',
     required: true
   },
+  sizes: [String],
+  colors: [String],
   createdBy: {
     type: mongoose.Types.ObjectId, ref: 'User',
     required: true
