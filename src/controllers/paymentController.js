@@ -31,10 +31,10 @@ exports.createPreference = async (req, res) => {
 
     // URL del Backend (Túnel Serveo/Cloudflare) para el Webhook
     // Si no está definida, usa localhost (aunque el webhook no funcionará en localhost)
-    const backendUrl = process.env.PUBLIC_DOMAIN || 'http://localhost:4000';
+    const backendUrl = process.env.PUBLIC_DOMAIN || 'http://localhost:2000';
     
     // URL del Frontend (Localhost) para redirigir al usuario
-    const frontendUrl = 'http://localhost:3000'; 
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
     console.log("🔗 Webhook irá a:", backendUrl);
     console.log("🔗 Usuario volverá a:", frontendUrl);
