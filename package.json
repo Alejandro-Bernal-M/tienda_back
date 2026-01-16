@@ -1,27 +1,28 @@
 {
-  "name": "lovocado-back",
+  "name": "mokaze-back",
   "version": "1.0.0",
-  "description": "API for lovocado virtual store",
+  "description": "API for mokaze virtual store",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/index.js"
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "build": "echo 'No build necessary'"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Alejandro-Bernal-M/Lovocado-back.git"
+    "url": "git+https://github.com/Alejandro-Bernal-M/Mokaze-back.git"
   },
   "keywords": [
     "API",
-    "Expres.js",
+    "Express.js",
     "Node"
   ],
   "author": "Alejandro-Bernal-M",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Alejandro-Bernal-M/Lovocado-back/issues"
+    "url": "https://github.com/Alejandro-Bernal-M/Mokaze-back/issues"
   },
-  "homepage": "https://github.com/Alejandro-Bernal-M/Lovocado-back#readme",
+  "homepage": "https://github.com/Alejandro-Bernal-M/Mokaze-back#readme",
   "dependencies": {
     "@stripe/stripe-js": "^4.0.0",
     "bcrypt": "^5.1.1",
