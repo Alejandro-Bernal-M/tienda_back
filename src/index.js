@@ -19,22 +19,36 @@ const paymentRoutes = require('./routes/paymentRoutes');
 env.config();
 
 // cors config
-var whitelist = [process.env.FRONTEND_URL, 'https://mercadopago.com.co']
+const frontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : "";
+
+var whitelist = [
+  frontendUrl, 
+  'https://mercadopago.com.co',
+  'http://localhost:3000' // Opcional: Para que siga funcionando en local
+];
+
 var corsOptions = {
   origin: function (origin, callback) {
-    if(!origin){//for bypassing postman req with  no origin
-      return callback(null, true);
-    }
+    // Permitir requests sin origen (como Postman o Server-to-Server)
+    if (!origin) return callback(null, true);
+
+    // LOG DE DEPURACIÓN (Míralo en los logs de Render)
+    console.log("🔍 Origen recibido:", origin);
+
     if (whitelist.indexOf(origin) !== -1) {
-      callback(null, true)
+      callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'))
+      console.log("❌ Bloqueado por CORS. Whitelist actual:", whitelist);
+      callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Array es mejor que string
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   credentials: true,
-}
-app.use(cors((corsOptions)))
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors()); // <--- IMPORTANTE: Habilitar Preflight
 
 //database conection
 mongoose.connect(process.env.MONGO_URI).then(() => console.log('Db connected')).catch((err) => console.log('Db connection error', err));
