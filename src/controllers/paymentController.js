@@ -3,12 +3,13 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
-const crypto = require('crypto'); // Para generar referencias únicas
+const crypto = require('crypto');
+const mongoose = require('mongoose'); // Necesario para validar IDs
 const Product = require('../models/product');
 const TempOrder = require('../models/tempOrder');
 const Order = require('../models/order');
 
-// 2. Validación de Token (Para evitar errores silenciosos)
+// 2. Validación de Token
 if (!process.env.MP_ACCESS_TOKEN) {
   console.error("❌ CRÍTICO: Falta MP_ACCESS_TOKEN en el archivo .env");
 }
@@ -22,54 +23,54 @@ exports.createPreference = async (req, res) => {
   console.log("👉 Inicio de createPreference"); 
 
   try {
-    const { items, userId } = req.body;
+    // Recibimos datos extra: envío, dirección y contacto
+    const { 
+        items, 
+        userId, 
+        shippingPrice = 0, 
+        deliveryAddress, 
+        contactName, 
+        contactEmail 
+    } = req.body;
 
     // Validación básica
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "El carrito está vacío" });
     }
 
-    // URL del Backend (Túnel Serveo/Cloudflare) para el Webhook
-    // Si no está definida, usa localhost (aunque el webhook no funcionará en localhost)
     const backendUrl = process.env.PUBLIC_DOMAIN || 'http://localhost:2000';
-    
-    // URL del Frontend (Localhost) para redirigir al usuario
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
     console.log("🔗 Webhook irá a:", backendUrl);
-    console.log("🔗 Usuario volverá a:", frontendUrl);
+    
+    // VALIDACIÓN DE ID DE USUARIO (Protección contra error Cast to ObjectId)
+    const validUserId = (userId && mongoose.Types.ObjectId.isValid(userId)) ? userId : null;
 
     const externalReference = crypto.randomUUID(); 
     let calculatedTotal = 0;
     
     console.log(`🔄 Procesando ${items.length} productos...`);
 
-    // 3. ARMADO DE ITEMS (BLINDADO)
+    // 3. ARMADO DE ITEMS
     const itemsForMP = await Promise.all(items.map(async (item) => {
       const product = await Product.findById(item._id);
       if (!product) throw new Error(`Producto no encontrado en DB: ${item._id}`);
 
-      // a. Cálculo de precio
       let finalPrice = product.price;
       if (product.offer > 0) {
         finalPrice = product.price - (product.price * product.offer / 100);
       }
       
-      // IMPORTANTE: Redondear para evitar errores en COP
       finalPrice = Math.round(finalPrice); 
-
       calculatedTotal += finalPrice * item.quantity;
 
-      // b. Manejo Seguro de Imágenes (Para que no explote si no hay foto)
-      let pictureUrl = 'https://www.mercadopago.com/org-img/MP3/home/logomp3.gif'; // Default
+      let pictureUrl = 'https://www.mercadopago.com/org-img/MP3/home/logomp3.gif';
       
       if (product.productImages && product.productImages.length > 0) {
-         // Si la imagen ya es una URL completa, úsala. Si es relativa, pégale el dominio.
          const img = product.productImages[0].img;
          if (img.startsWith('http')) {
             pictureUrl = img;
          } else {
-            // Asumiendo que sirves estáticos en /public
             pictureUrl = `${backendUrl}/public/${img}`;
          }
       }
@@ -84,25 +85,35 @@ exports.createPreference = async (req, res) => {
       };
     }));
 
-    // 4. CREAR OBJETO DE PREFERENCIA
+    // 4. AGREGAR COSTO DE ENVÍO (Si existe)
+    if (Number(shippingPrice) > 0) {
+        console.log(`🚚 Agregando envío por: $${shippingPrice}`);
+        itemsForMP.push({
+            id: 'shipping-cost',
+            title: 'Costo de envío',
+            quantity: 1,
+            unit_price: Number(shippingPrice),
+            currency_id: 'COP'
+        });
+        calculatedTotal += Number(shippingPrice);
+    }
+
+    // 5. CREAR OBJETO DE PREFERENCIA
     const body = {
       items: itemsForMP,
-      external_reference: externalReference, // Clave para conciliar pago
+      external_reference: externalReference,
       payer: {
-         // Si tienes datos del usuario, agrégalos aquí (email, name)
+          email: contactEmail || 'test_user_123@testuser.com' // Ayuda a prellenar MP
       },
-      back_urls: {
+      back_urls: { // ✅ CORREGIDO: Es plural (back_urls)
         success: `${frontendUrl}/checkout/success`,
         failure: `${frontendUrl}/checkout/failure`,
         pending: `${frontendUrl}/checkout/pending`
       },
       auto_return: "approved", 
-      
-      // El Webhook SÍ debe ser HTTPS público (Serveo/Cloudflare)
       notification_url: `${backendUrl}/api/payment/webhook`,
-      
       metadata: {
-        user_id: userId || null 
+        user_id: validUserId 
       }
     };
 
@@ -113,21 +124,26 @@ exports.createPreference = async (req, res) => {
 
     console.log("✅ Preferencia creada. ID:", result.id);
 
-    // 5. GUARDAR ORDEN TEMPORAL
+    // 6. GUARDAR ORDEN TEMPORAL CON DATOS COMPLETOS
+    // Guardamos dirección y nombre para recuperarlos tras el pago
     await TempOrder.create({
       preferenceId: result.id, 
       externalReference: externalReference,
-      user: userId || null,
+      user: validUserId,
       products: items.map(i => ({ product: i._id, quantity: i.quantity })),
-      totalAmount: calculatedTotal
+      totalAmount: calculatedTotal,
+      
+      // Datos guardados para cumplir requisitos del modelo Order
+      shippingCost: Number(shippingPrice),
+      name: contactName || 'Cliente Invitado',
+      email: contactEmail,
+      address: deliveryAddress // Objeto completo {city, country, line1...}
     });
 
-    // Responder con la URL de pago
     res.status(200).json({ url: result.init_point });
 
   } catch (error) {
     console.error('❌ Error CRÍTICO en createPreference:', error);
-    // Devolvemos JSON 500 para evitar el error genérico de CORS en el frontend
     res.status(500).json({ 
       message: 'Error interno al crear el pago', 
       error: error.message || 'Unknown Error'
@@ -150,10 +166,11 @@ async function fulfillOrder(paymentInfo) {
     }
 
     // 2. Crear la Orden Real
+    // Recuperamos los datos de dirección guardados en TempOrder
     const newOrder = await Order.create({
         user: tempOrder.user,
         products: tempOrder.products,
-        totalAmount: paymentInfo.transaction_amount,
+        totalAmount: paymentInfo.transaction_amount, // Usa el total real pagado
         paymentStatus: paymentInfo.status === 'approved' ? 'paid' : paymentInfo.status,
         paymentType: 'MercadoPago',
         paymentInfo: {
@@ -161,8 +178,11 @@ async function fulfillOrder(paymentInfo) {
             status: paymentInfo.status,
             type: paymentInfo.payment_type_id
         },
-        email: paymentInfo.payer.email,
-        createdAt: new Date(),
+        
+        // CORRECCIÓN DE VALIDACIÓN (Llenar campos required)
+        email: tempOrder.email || paymentInfo.payer.email,
+        name: tempOrder.name,     // Recuperado de TempOrder
+        address: tempOrder.address // Recuperado de TempOrder
     });
 
     console.log(`✅ Orden ${newOrder._id} creada exitosamente.`);
@@ -172,13 +192,13 @@ async function fulfillOrder(paymentInfo) {
 
   } catch (dbError) {
       console.error("❌ Error guardando orden en BD:", dbError);
+      // Aquí podrías agregar lógica para guardar el error en un log o notificar al admin
   }
 }
 
 // --- WEBHOOK ---
 exports.handleWebhook = async (req, res) => {
   const query = req.query;
-  // MP a veces manda topic o type
   const topic = query.topic || query.type; 
 
   console.log("🔔 Webhook recibido. Topic:", topic);
@@ -189,7 +209,6 @@ exports.handleWebhook = async (req, res) => {
       
       if (!paymentId) return res.sendStatus(200);
 
-      // Consultar estado real a MP
       const payment = new Payment(client);
       const paymentInfo = await payment.get({ id: paymentId });
 
@@ -203,6 +222,5 @@ exports.handleWebhook = async (req, res) => {
     }
   }
   
-  // Responder siempre 200 para que MP no reintente infinitamente
   res.sendStatus(200);
 };
