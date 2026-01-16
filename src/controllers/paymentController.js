@@ -91,7 +91,7 @@ exports.createPreference = async (req, res) => {
       payer: {
          // Si tienes datos del usuario, agrégalos aquí (email, name)
       },
-      back_urls: {
+      back_url: {
         success: `${frontendUrl}/checkout/success`,
         failure: `${frontendUrl}/checkout/failure`,
         pending: `${frontendUrl}/checkout/pending`
