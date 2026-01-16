@@ -71,9 +71,11 @@ exports.createPreference = async (req, res) => {
          }
       }
 
+      const titleWithVariant = `${product.name} (${item.size || 'N/A'} / ${item.color || 'N/A'})`;
+
       return {
         id: product._id.toString(),
-        title: product.name,
+        title: titleWithVariant,
         quantity: Number(item.quantity),
         unit_price: Number(finalPrice),
         currency_id: 'COP', 
@@ -119,7 +121,7 @@ exports.createPreference = async (req, res) => {
       preferenceId: result.id, 
       externalReference: externalReference,
       user: validUserId,
-      products: items.map(i => ({ product: i._id, quantity: i.quantity })),
+      products: items.map(i => ({ product: i._id, quantity: i.quantity, color: i.color, size: i.size })),
       totalAmount: calculatedTotal,
       shippingCost: Number(shippingPrice),
       name: contactName || 'Cliente Invitado',

@@ -8,6 +8,8 @@ const tempOrderSchema = new mongoose.Schema({
     {
       product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
       quantity: { type: Number, required: true },
+      color: { type: String },
+      size: { type: String }
     }
   ],
   totalAmount: { type: Number },

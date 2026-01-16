@@ -52,6 +52,8 @@ const OrderSchema = mongoose.Schema({
         type: Number,
         required: true,
       },
+      color: { type: String },
+      size: { type: String }
     },
   ],
   paymentStatus: {
