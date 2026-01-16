@@ -19,7 +19,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 env.config();
 
 // cors config
-var whitelist = ['http://localhost:3000', 'https://mercadopago.com.co']
+var whitelist = [process.env.FRONTEND_URL, 'https://mercadopago.com.co']
 var corsOptions = {
   origin: function (origin, callback) {
     if(!origin){//for bypassing postman req with  no origin
