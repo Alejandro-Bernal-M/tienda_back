@@ -4,7 +4,7 @@ dotenv.config();
 
 const { MercadoPagoConfig, Preference, Payment } = require('mercadopago');
 const crypto = require('crypto');
-const mongoose = require('mongoose'); // Necesario para validar IDs
+const mongoose = require('mongoose');
 const Product = require('../models/product');
 const TempOrder = require('../models/tempOrder');
 const Order = require('../models/order');
@@ -23,7 +23,6 @@ exports.createPreference = async (req, res) => {
   console.log("👉 Inicio de createPreference"); 
 
   try {
-    // Recibimos datos extra: envío, dirección y contacto
     const { 
         items, 
         userId, 
@@ -33,7 +32,6 @@ exports.createPreference = async (req, res) => {
         contactEmail 
     } = req.body;
 
-    // Validación básica
     if (!items || items.length === 0) {
       return res.status(400).json({ message: "El carrito está vacío" });
     }
@@ -43,9 +41,7 @@ exports.createPreference = async (req, res) => {
 
     console.log("🔗 Webhook irá a:", backendUrl);
     
-    // VALIDACIÓN DE ID DE USUARIO (Protección contra error Cast to ObjectId)
     const validUserId = (userId && mongoose.Types.ObjectId.isValid(userId)) ? userId : null;
-
     const externalReference = crypto.randomUUID(); 
     let calculatedTotal = 0;
     
@@ -85,9 +81,7 @@ exports.createPreference = async (req, res) => {
       };
     }));
 
-    // 4. AGREGAR COSTO DE ENVÍO (Si existe)
     if (Number(shippingPrice) > 0) {
-        console.log(`🚚 Agregando envío por: $${shippingPrice}`);
         itemsForMP.push({
             id: 'shipping-cost',
             title: 'Costo de envío',
@@ -98,14 +92,13 @@ exports.createPreference = async (req, res) => {
         calculatedTotal += Number(shippingPrice);
     }
 
-    // 5. CREAR OBJETO DE PREFERENCIA
     const body = {
       items: itemsForMP,
       external_reference: externalReference,
       payer: {
-          email: contactEmail || 'test_user_123@testuser.com' // Ayuda a prellenar MP
+          email: contactEmail || 'test_user_123@testuser.com' 
       },
-      back_urls: { // ✅ CORREGIDO: Es plural (back_urls)
+      back_urls: { 
         success: `${frontendUrl}/checkout/success`,
         failure: `${frontendUrl}/checkout/failure`,
         pending: `${frontendUrl}/checkout/pending`
@@ -117,27 +110,21 @@ exports.createPreference = async (req, res) => {
       }
     };
 
-    console.log("📤 Enviando preferencia a Mercado Pago...");
-
     const preference = new Preference(client);
     const result = await preference.create({ body });
 
     console.log("✅ Preferencia creada. ID:", result.id);
 
-    // 6. GUARDAR ORDEN TEMPORAL CON DATOS COMPLETOS
-    // Guardamos dirección y nombre para recuperarlos tras el pago
     await TempOrder.create({
       preferenceId: result.id, 
       externalReference: externalReference,
       user: validUserId,
       products: items.map(i => ({ product: i._id, quantity: i.quantity })),
       totalAmount: calculatedTotal,
-      
-      // Datos guardados para cumplir requisitos del modelo Order
       shippingCost: Number(shippingPrice),
       name: contactName || 'Cliente Invitado',
       email: contactEmail,
-      address: deliveryAddress // Objeto completo {city, country, line1...}
+      address: deliveryAddress 
     });
 
     res.status(200).json({ url: result.init_point });
@@ -154,35 +141,42 @@ exports.createPreference = async (req, res) => {
 // --- FUNCIÓN AUXILIAR: COMPLETAR LA ORDEN ---
 async function fulfillOrder(paymentInfo) {
   const externalRef = paymentInfo.external_reference;
-  console.log(`🔄 Procesando orden para ref: ${externalRef}`);
+  const paymentId = paymentInfo.id.toString(); // Aseguramos que sea string para comparar
+
+  console.log(`🔄 Intento de procesar orden. Ref: ${externalRef} | PaymentID: ${paymentId}`);
 
   try {
+    const existingOrder = await Order.findOne({ 'paymentInfo.id': paymentId });
+
+    if (existingOrder) {
+        console.log(`✋ ALTO: La orden para el pago ${paymentId} YA EXISTE. Ignorando duplicado.`);
+        return;
+    }
+    // ---------------------------------------------------------
+
     // 1. Buscar la TempOrder
     const tempOrder = await TempOrder.findOne({ externalReference: externalRef });
 
     if (!tempOrder) {
-      console.log("⚠️ TempOrder no encontrada o ya procesada.");
+      console.log("⚠️ TempOrder no encontrada (o ya fue procesada y borrada).");
       return;
     }
 
     // 2. Crear la Orden Real
-    // Recuperamos los datos de dirección guardados en TempOrder
     const newOrder = await Order.create({
         user: tempOrder.user,
         products: tempOrder.products,
-        totalAmount: paymentInfo.transaction_amount, // Usa el total real pagado
+        totalAmount: paymentInfo.transaction_amount, 
         paymentStatus: paymentInfo.status === 'approved' ? 'paid' : paymentInfo.status,
         paymentType: 'MercadoPago',
         paymentInfo: {
-            id: paymentInfo.id,
+            id: paymentId,
             status: paymentInfo.status,
             type: paymentInfo.payment_type_id
         },
-        
-        // CORRECCIÓN DE VALIDACIÓN (Llenar campos required)
         email: tempOrder.email || paymentInfo.payer.email,
-        name: tempOrder.name,     // Recuperado de TempOrder
-        address: tempOrder.address // Recuperado de TempOrder
+        name: tempOrder.name,     
+        address: tempOrder.address 
     });
 
     console.log(`✅ Orden ${newOrder._id} creada exitosamente.`);
@@ -192,7 +186,6 @@ async function fulfillOrder(paymentInfo) {
 
   } catch (dbError) {
       console.error("❌ Error guardando orden en BD:", dbError);
-      // Aquí podrías agregar lógica para guardar el error en un log o notificar al admin
   }
 }
 
@@ -212,6 +205,7 @@ exports.handleWebhook = async (req, res) => {
       const payment = new Payment(client);
       const paymentInfo = await payment.get({ id: paymentId });
 
+      // Solo procesamos si está aprobado
       if (paymentInfo.status === 'approved') {
         await fulfillOrder(paymentInfo);
       } else {
@@ -222,5 +216,6 @@ exports.handleWebhook = async (req, res) => {
     }
   }
   
+  // Responder siempre 200 RAPIDO para que MP no reintente agresivamente
   res.sendStatus(200);
 };
