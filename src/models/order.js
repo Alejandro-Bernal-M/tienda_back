@@ -70,6 +70,8 @@ const OrderSchema = mongoose.Schema({
   paymentInfo: {
     id: {
       type: String,
+      unique: true, 
+      sparse: true
     },
     status: {
       type: String,

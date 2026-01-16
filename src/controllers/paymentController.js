@@ -141,48 +141,52 @@ exports.createPreference = async (req, res) => {
 // --- FUNCIÓN AUXILIAR: COMPLETAR LA ORDEN ---
 async function fulfillOrder(paymentInfo) {
   const externalRef = paymentInfo.external_reference;
-  const paymentId = paymentInfo.id.toString(); // Aseguramos que sea string para comparar
+  const paymentId = paymentInfo.id.toString(); 
 
   console.log(`🔄 Intento de procesar orden. Ref: ${externalRef} | PaymentID: ${paymentId}`);
 
   try {
+    // 1. IDEMPOTENCIA NIVEL 1: Chequeo rápido
     const existingOrder = await Order.findOne({ 'paymentInfo.id': paymentId });
-
     if (existingOrder) {
         console.log(`✋ ALTO: La orden para el pago ${paymentId} YA EXISTE. Ignorando duplicado.`);
         return;
     }
-    // ---------------------------------------------------------
 
-    // 1. Buscar la TempOrder
-    const tempOrder = await TempOrder.findOne({ externalReference: externalRef });
+    // 2. IDEMPOTENCIA NIVEL 2: Atomicidad (Borrar y Traer en un solo paso)
+    // ESTO ES LA CLAVE: findOneAndDelete evita que dos hilos tomen la misma orden
+    const tempOrder = await TempOrder.findOneAndDelete({ externalReference: externalRef });
 
     if (!tempOrder) {
-      console.log("⚠️ TempOrder no encontrada (o ya fue procesada y borrada).");
+      console.log("⚠️ TempOrder no encontrada (o ya fue procesada y borrada por otro hilo).");
       return;
     }
 
-    // 2. Crear la Orden Real
-    const newOrder = await Order.create({
-        user: tempOrder.user,
-        products: tempOrder.products,
-        totalAmount: paymentInfo.transaction_amount, 
-        paymentStatus: paymentInfo.status === 'approved' ? 'paid' : paymentInfo.status,
-        paymentType: 'MercadoPago',
-        paymentInfo: {
-            id: paymentId,
-            status: paymentInfo.status,
-            type: paymentInfo.payment_type_id
-        },
-        email: tempOrder.email || paymentInfo.payer.email,
-        name: tempOrder.name,     
-        address: tempOrder.address 
-    });
+    // 3. Crear la Orden Real
+    try {
+        const newOrder = await Order.create({
+            user: tempOrder.user,
+            products: tempOrder.products,
+            totalAmount: paymentInfo.transaction_amount, 
+            paymentStatus: paymentInfo.status === 'approved' ? 'paid' : paymentInfo.status,
+            paymentType: 'MercadoPago',
+            paymentInfo: {
+                id: paymentId,
+                status: paymentInfo.status,
+                type: paymentInfo.payment_type_id
+            },
+            email: tempOrder.email || paymentInfo.payer.email,
+            name: tempOrder.name,     
+            address: tempOrder.address 
+        });
 
-    console.log(`✅ Orden ${newOrder._id} creada exitosamente.`);
-
-    // 3. Borrar la TempOrder
-    await TempOrder.deleteOne({ _id: tempOrder._id });
+        console.log(`✅ Orden ${newOrder._id} creada exitosamente.`);
+    } catch (createError) {
+        // Si falla la creación (ej: validación de mongoose), logueamos el error grave
+        // porque la TempOrder YA FUE BORRADA.
+        console.error("❌ Error CRÍTICO creando orden final:", createError);
+        console.error("DATOS PERDIDOS (TempOrder):", JSON.stringify(tempOrder));
+    }
 
   } catch (dbError) {
       console.error("❌ Error guardando orden en BD:", dbError);
@@ -216,6 +220,6 @@ exports.handleWebhook = async (req, res) => {
     }
   }
   
-  // Responder siempre 200 RAPIDO para que MP no reintente agresivamente
+  // Responder siempre 200 RAPIDO
   res.sendStatus(200);
 };
