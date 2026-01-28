@@ -296,3 +296,49 @@ exports.subtractQuantity = async (req, res) => {
     return res.status(500).json({ error: error, message: 'Error substracting quantity' });
   }
 }
+
+exports.mergeCart = async (req, res) => {
+  try {
+    const cart = await Cart.findOne({ user: req.user._id });
+    const items = req.body.items;
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ message: 'No items to merge' });
+    }
+
+    for (const item of items) {
+      const product = await Product.findById(item._id);
+
+      if (!product) {
+      return res.status(404).json({ message: `Product ${item._id} not found` });
+      }
+
+      if (product.quantity < item.quantity) {
+      return res.status(400).json({ message: `Insufficient stock for ${product.name}` });
+      }
+
+      const discountedPrice = item.offer ? product.price - (product.price * item.offer / 100) : product.price;
+      const itemIndex = cart.cartItems.findIndex(cartItem => cartItem.product.toString() === item._id.toString() && cartItem.size === item.size && cartItem.color === item.color);
+
+      if (itemIndex !== -1) {
+      cart.cartItems[itemIndex].quantity += item.quantity;
+      cart.cartItems[itemIndex].price = discountedPrice;
+      } else {
+      cart.cartItems.push({
+        product: item._id,
+        price: discountedPrice,
+        quantity: item.quantity,
+        offer: item.offer,
+        size: item.size,
+        color: item.color
+      });
+      }
+    }
+
+    const updatedCart = await cart.save();
+    return res.status(200).json({ updatedCart });
+    } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: error, message: 'Error merging cart' });
+    }
+}

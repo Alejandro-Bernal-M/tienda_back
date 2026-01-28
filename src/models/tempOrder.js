@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const tempOrderSchema = new mongoose.Schema({
   preferenceId: { type: String, required: true }, // ID de la preferencia de MP
   externalReference: { type: String },
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
   products: [
     {
       product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
