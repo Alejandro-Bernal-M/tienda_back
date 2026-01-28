@@ -38,6 +38,9 @@ exports.createProduct = async (req, res) => {
     productImages = req.files.map((file) => ({ img: file.filename }));
   }
 
+  const processedSizes = sizes ? sizes.split(',').map(size => size.trim().toUpperCase()) : [];
+  const processedColors = colors ? colors.split(',').map(color => color.trim().toUpperCase()) : [];
+
   const product = new Product({
     name,
     slug: slugify(name),
@@ -47,8 +50,8 @@ exports.createProduct = async (req, res) => {
     category,
     productImages,
     offer,
-    sizes,
-    colors,
+    sizes: processedSizes,
+    colors: processedColors,
     createdBy: req.user._id,
   });
 
@@ -138,6 +141,9 @@ exports.updateProduct = async (req, res) => {
     productImages = req.files.map((file) => ({ img: file.filename }));
   }
 
+  const processedSizes = sizes ? sizes.split(',').map(size => size.trim().toUpperCase()) : [];
+  const processedColors = colors ? colors.split(',').map(color => color.trim().toUpperCase()) : [];
+
   const updatedFields = {
     name,
     price,
@@ -148,8 +154,8 @@ exports.updateProduct = async (req, res) => {
     updatedAt: Date.now(),
     reviews,
     offer,
-    sizes: sizes.split(',').map(size => size.trim()),
-    colors: colors.split(',').map(color => color.trim())
+    sizes: processedSizes,
+    colors: processedColors
   };
 
   try {
@@ -157,7 +163,7 @@ exports.updateProduct = async (req, res) => {
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
     }
-    let filteredImages
+    let filteredImages = [];
 
     if(imagesToDeleteIds.length > 0) {
       filteredImages = product.productImages.filter((image) => !imagesToDeleteIds.includes(image._id));
